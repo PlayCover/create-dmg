@@ -46,7 +46,6 @@
 		"execa": "^8.0.1",
 		"gm": "^1.25.0",
 		"icns-lib": "^1.0.1",
-		"macos-alias": "github:RaySajuuk/node-alias#dep0047-fix",
 		"meow": "^13.1.0",
 		"ora": "^8.0.1",
 		"plist": "^3.1.0",
