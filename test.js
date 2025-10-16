@@ -14,7 +14,7 @@ test('main', async t => {
 		await execa(path.join(__dirname, 'cli.js'), ['--identity=0', path.join(__dirname, 'fixtures/Fixture.app')], {cwd});
 	} catch (error) {
 		// Silence code signing failure
-		if (!error.message.includes('No suitable code signing')) {
+		if (!error.message.includes('Code signing failed')) {
 			throw error;
 		}
 	}
@@ -29,7 +29,7 @@ test('binary plist', async t => {
 		await execa(path.join(__dirname, 'cli.js'), ['--identity=0', path.join(__dirname, 'fixtures/Fixture-with-binary-plist.app')], {cwd});
 	} catch (error) {
 		// Silence code signing failure
-		if (!error.message.includes('No suitable code signing')) {
+		if (!error.message.includes('Code signing failed')) {
 			throw error;
 		}
 	}
@@ -44,10 +44,35 @@ test('app without icon', async t => {
 		await execa(path.join(__dirname, 'cli.js'), ['--identity=0', path.join(__dirname, 'fixtures/Fixture-no-icon.app')], {cwd});
 	} catch (error) {
 		// Silence code signing failure
-		if (!error.message.includes('No suitable code signing')) {
+		if (!error.message.includes('Code signing failed')) {
 			throw error;
 		}
 	}
+
+	t.true(fs.existsSync(path.join(cwd, 'Fixture 0.0.1.dmg')));
+});
+
+test('--no-version-in-filename flag', async t => {
+	const cwd = temporaryDirectory();
+
+	try {
+		await execa(path.join(__dirname, 'cli.js'), ['--identity=0', '--no-version-in-filename', path.join(__dirname, 'fixtures/Fixture.app')], {cwd});
+	} catch (error) {
+		// Silence code signing failure
+		if (!error.message.includes('Code signing failed')) {
+			throw error;
+		}
+	}
+
+	t.true(fs.existsSync(path.join(cwd, 'Fixture.dmg')));
+	t.false(fs.existsSync(path.join(cwd, 'Fixture 0.0.1.dmg')));
+});
+
+test('--no-code-sign flag', async t => {
+	const cwd = temporaryDirectory();
+
+	// This should succeed without any code signing errors
+	await execa(path.join(__dirname, 'cli.js'), ['--no-code-sign', path.join(__dirname, 'fixtures/Fixture.app')], {cwd});
 
 	t.true(fs.existsSync(path.join(cwd, 'Fixture 0.0.1.dmg')));
 });

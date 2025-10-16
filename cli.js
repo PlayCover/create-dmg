@@ -23,9 +23,11 @@ const cli = meow(`
 	  $ create-dmg <app> [destination]
 
 	Options
-	  --overwrite          Overwrite existing DMG with the same name
-	  --identity=<value>   Manually set code signing identity (automatic by default)
-	  --dmg-title=<value>  Manually set DMG title (must be <=27 characters) [default: App name]
+	  --overwrite                  Overwrite existing DMG with the same name
+	  --no-version-in-filename     Exclude version number from DMG filename
+	  --identity=<value>           Manually set code signing identity (automatic by default)
+	  --dmg-title=<value>          Manually set DMG title (must be <=27 characters) [default: App name]
+	  --no-code-sign               Skip code signing the DMG
 
 	Examples
 	  $ create-dmg 'Lungo.app'
@@ -36,11 +38,19 @@ const cli = meow(`
 		overwrite: {
 			type: 'boolean',
 		},
+		versionInFilename: {
+			type: 'boolean',
+			default: true,
+		},
 		identity: {
 			type: 'string',
 		},
 		dmgTitle: {
 			type: 'string',
+		},
+		codeSign: {
+			type: 'boolean',
+			default: true,
 		},
 	},
 });
@@ -88,7 +98,7 @@ async function init() {
 	}
 
 	const dmgTitle = cli.flags.dmgTitle ?? appName;
-	const dmgFilename = `${appName} ${appInfo.CFBundleShortVersionString}.dmg`;
+	const dmgFilename = cli.flags.versionInFilename ? `${appName} ${appInfo.CFBundleShortVersionString}.dmg` : `${appName}.dmg`;
 	const dmgPath = path.join(destinationPath, dmgFilename);
 
 	if (dmgTitle.length > 27) {
@@ -160,42 +170,50 @@ async function init() {
 			ora.text = 'Adding Software License Agreement if needed';
 			await addLicenseAgreementIfNeeded(dmgPath, dmgFormat);
 
-			ora.text = 'Code signing DMG';
-			let identity;
-			const {stdout} = await execa('/usr/bin/security', ['find-identity', '-v', '-p', 'codesigning']);
-			if (cli.flags.identity && stdout.includes(`"${cli.flags.identity}"`)) {
-				identity = cli.flags.identity;
-			} else if (!cli.flags.identity && stdout.includes('Developer ID Application:')) {
-				identity = 'Developer ID Application';
-			} else if (!cli.flags.identity && stdout.includes('Mac Developer:')) {
-				identity = 'Mac Developer';
-			} else if (!cli.flags.identity && stdout.includes('Apple Development:')) {
-				identity = 'Apple Development';
+			if (cli.flags.codeSign) {
+				ora.text = 'Code signing DMG';
+				let identity;
+				if (cli.flags.identity) {
+					// We skip identity validation to support both named and SHA-1 formats; let system validate.
+					identity = cli.flags.identity;
+				} else {
+					const {stdout} = await execa('/usr/bin/security', ['find-identity', '-v', '-p', 'codesigning']);
+					if (!cli.flags.identity && stdout.includes('Developer ID Application:')) {
+						identity = 'Developer ID Application';
+					} else if (!cli.flags.identity && stdout.includes('Mac Developer:')) {
+						identity = 'Mac Developer';
+					} else if (!cli.flags.identity && stdout.includes('Apple Development:')) {
+						identity = 'Apple Development';
+					}
+				}
+
+				if (!identity) {
+					const error = new Error(); // eslint-disable-line unicorn/error-message
+					error.stderr = 'No suitable code signing identity found';
+					throw error;
+				}
+
+				try {
+					await execa('/usr/bin/codesign', ['--sign', identity, dmgPath]);
+				} catch (error) {
+					ora.fail(`Code signing failed. The DMG is fine, just not code signed.\n${error.stderr?.trim() ?? error}`);
+					process.exit(2);
+				}
+
+				const {stderr} = await execa('/usr/bin/codesign', [dmgPath, '--display', '--verbose=2']);
+
+				const match = /^Authority=(.*)$/m.exec(stderr);
+				if (!match) {
+					ora.fail('Not code signed');
+					process.exit(1);
+				}
+
+				ora.info(`Code signing identity: ${match[1]}`).start();
+			} else {
+				ora.info('Code signing skipped').start();
 			}
 
-			if (!identity) {
-				const error = new Error(); // eslint-disable-line unicorn/error-message
-				error.stderr = 'No suitable code signing identity found';
-				throw error;
-			}
-
-			try {
-				await execa('/usr/bin/codesign', ['--sign', identity, dmgPath]);
-			} catch (error) {
-				ora.fail(`Code signing failed. The DMG is fine, just not code signed.\n${error.stderr?.trim() ?? error}`);
-				process.exit(2);
-			}
-
-			const {stderr} = await execa('/usr/bin/codesign', [dmgPath, '--display', '--verbose=2']);
-
-			const match = /^Authority=(.*)$/m.exec(stderr);
-			if (!match) {
-				ora.fail('Not code signed');
-				process.exit(1);
-			}
-
-			ora.info(`Code signing identity: ${match[1]}`).start();
-			ora.succeed(`Created “${dmgFilename}”`);
+			ora.succeed(`Created "${dmgFilename}"`);
 		} catch (error) {
 			ora.fail(`${error.stderr?.trim() ?? error}`);
 			process.exit(2);
