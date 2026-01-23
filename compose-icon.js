@@ -80,10 +80,16 @@ export default async function composeIcon(appIconPath) {
 		return baseDiskIconPath;
 	}
 
-	const [baseDiskIconsData, appIconData] = await Promise.all([
-		fs.readFile(baseDiskIconPath),
-		fs.readFile(appIconPath),
-	]);
+	let baseDiskIconsData;
+	let appIconData;
+	try {
+		[baseDiskIconsData, appIconData] = await Promise.all([
+			fs.readFile(baseDiskIconPath),
+			fs.readFile(appIconPath),
+		]);
+	} catch {
+		return baseDiskIconPath;
+	}
 
 	const baseDiskIcons = parseImageTypes(baseDiskIconsData);
 	const appIcons = parseImageTypes(appIconData);

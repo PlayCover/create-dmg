@@ -152,3 +152,11 @@ test('--no-code-sign flag', async t => {
 
 	t.true(fs.existsSync(getDmgPath(cwd, 'Fixture', '0.0.1')));
 });
+
+test('app with missing icon file', async t => {
+	const cwd = temporaryDirectory();
+
+	await runCreateDmg(['--identity=0', path.join(__dirname, 'fixtures/Fixture-missing-icon.app')], cwd);
+
+	t.true(fs.existsSync(getDmgPath(cwd, 'Fixture', '0.0.1')));
+});
