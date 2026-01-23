@@ -160,3 +160,21 @@ test('app with missing icon file', async t => {
 
 	t.true(fs.existsSync(getDmgPath(cwd, 'Fixture', '0.0.1')));
 });
+
+test('license agreement with txt', async t => {
+	const cwd = temporaryDirectory();
+	fs.writeFileSync(path.join(cwd, 'license.txt'), 'This is a test license agreement.\n\nYou must agree to these terms.');
+
+	await runCreateDmg(['--identity=0', path.join(__dirname, 'fixtures/Fixture.app')], cwd);
+
+	t.true(fs.existsSync(getDmgPath(cwd, 'Fixture', '0.0.1')));
+});
+
+test('license agreement with rtf', async t => {
+	const cwd = temporaryDirectory();
+	fs.writeFileSync(path.join(cwd, 'license.rtf'), '{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Times New Roman;}}\\f0\\fs24 This is a test license agreement.\\par\\par You must agree to these terms.}');
+
+	await runCreateDmg(['--identity=0', path.join(__dirname, 'fixtures/Fixture.app')], cwd);
+
+	t.true(fs.existsSync(getDmgPath(cwd, 'Fixture', '0.0.1')));
+});

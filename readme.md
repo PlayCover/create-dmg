@@ -48,9 +48,7 @@ It will try to code sign the DMG, but the DMG is still created and fine even if 
 
 ### Software license agreement
 
-If either `license.txt`, `license.rtf`, or `sla.r` ([raw SLAResources file](https://download.developer.apple.com/Developer_Tools/software_licensing_for_udif/slas_for_udifs_1.0.dmg)) are present in the same directory as the app, it will be added as a software agreement when opening the image. The image will not be mounted unless the user indicates agreement with the license.
-
-`/usr/bin/rez` (from [Command Line Tools for Xcode](https://developer.apple.com/download/more/)) must be installed.
+If either `license.txt` or `license.rtf` is present in the current working directory, it will be added as a software license agreement when opening the image. The image will not be mounted unless the user indicates agreement with the license.
 
 #### Icon example
 
