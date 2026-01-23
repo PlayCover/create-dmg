@@ -19,7 +19,7 @@
 	},
 	"scripts": {
 		"test": "ava",
-		"build": "./build-swift.sh",
+		"build": "cd ComposeIcon && xcrun swift build -c release --arch arm64 --arch x86_64 --product compose-icon && cp .build/apple/Products/Release/compose-icon ../compose-icon",
 		"prepublishOnly": "npm run build"
 	},
 	"files": [
