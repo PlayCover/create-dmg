@@ -15,7 +15,7 @@
 		"create-dmg": "./cli.js"
 	},
 	"engines": {
-		"node": ">=18"
+		"node": ">=20"
 	},
 	"scripts": {
 		"test": "ava",
@@ -25,11 +25,10 @@
 	"files": [
 		"cli.js",
 		"compose-icon.js",
-		"compose-icon",
+		"sla.js",
 		"assets",
 		"disk-icon.icns",
-		"sla.js",
-		"base.r"
+		"compose-icon"
 	],
 	"keywords": [
 		"cli-app",
@@ -46,17 +45,17 @@
 	],
 	"dependencies": {
 		"appdmg": "^0.6.6",
-		"execa": "^8.0.1",
+		"execa": "^9.6.1",
 		"icns-lib": "^1.0.1",
-		"meow": "^13.1.0",
-		"ora": "^8.0.1",
+		"meow": "^14.0.0",
+		"ora": "^9.1.0",
 		"plist": "^3.1.0",
-		"tempy": "^3.1.0"
+		"tempy": "^3.1.1"
 	},
 	"devDependencies": {
-		"ava": "^6.1.1",
+		"ava": "^6.4.1",
 		"jest-image-snapshot": "^6.5.1",
-		"xo": "^0.56.0"
+		"xo": "^1.2.3"
 	},
 	"ava": {
 		"serial": true,
