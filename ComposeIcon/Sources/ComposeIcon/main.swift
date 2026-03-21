@@ -46,52 +46,21 @@ private enum Layout {
 
 	Determined empirically to match the original ImageMagick output.
 	*/
-	static let widthResizeFactor = 1.58
+	static let widthResizeFactor = 1.92
 
 	/**
 	Resize factor to fit app icon height inside disk icon.
 
 	Determined empirically to match the original ImageMagick output.
 	*/
-	static let heightResizeFactor = 1.82
+	static let heightResizeFactor = 1.92
 
 	/**
 	Vertical offset factor to position app icon correctly on disk icon.
 
 	Determined empirically to match the original ImageMagick output.
 	*/
-	static let verticalOffsetFactor = 0.063
-}
-
-// MARK: - Image Operations
-
-extension CGImage {
-	func applyingPerspective(using context: CIContext) throws(ComposeIconError) -> CGImage {
-		let ciImage = CIImage(cgImage: self)
-		let filter = CIFilter.perspectiveTransform()
-
-		let w = Double(width)
-		let h = Double(height)
-
-		filter.inputImage = ciImage
-		filter.topLeft = CGPoint(x: w * Layout.perspectiveInset, y: h)
-		filter.topRight = CGPoint(x: w * (1 - Layout.perspectiveInset), y: h)
-		filter.bottomLeft = CGPoint(x: 0, y: 0)
-		filter.bottomRight = CGPoint(x: w, y: 0)
-
-		guard let outputImage = filter.outputImage else {
-			throw .perspectiveTransformFailed
-		}
-
-		let inputExtent = ciImage.extent
-		let croppedImage = outputImage.cropped(to: inputExtent)
-
-		guard let result = context.createCGImage(croppedImage, from: inputExtent) else {
-			throw .perspectiveTransformFailed
-		}
-
-		return result
-	}
+	static let verticalOffsetFactor = 0.043
 }
 
 // MARK: - Main
@@ -113,19 +82,13 @@ func run() throws(ComposeIconError) {
 		throw .loadFailed(diskIconURL)
 	}
 
-	// Reuse CIContext for efficiency
-	let ciContext = CIContext()
-
-	// Apply perspective transformation
-	let transformedAppImage = try appImage.applyingPerspective(using: ciContext)
-
 	// Resize app icon to fit inside disk icon
 	let resizedSize = CGSize(
 		width: (Double(diskImage.width) / Layout.widthResizeFactor).rounded(),
 		height: (Double(diskImage.height) / Layout.heightResizeFactor).rounded()
 	)
 
-	guard let resizedAppImage = transformedAppImage.resized(to: resizedSize) else {
+	guard let resizedAppImage = appImage.resized(to: resizedSize) else {
 		throw .resizeFailed
 	}
 
