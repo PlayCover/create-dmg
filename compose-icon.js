@@ -1,90 +1,140 @@
-import {Buffer} from 'node:buffer';
-import fs from 'node:fs';
-import {promisify} from 'node:util';
+import fs from 'node:fs/promises';
+import {constants as fsConstants} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execa} from 'execa';
 import {temporaryFile} from 'tempy';
-import baseGm from 'gm';
 import icns from 'icns-lib';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const gm = baseGm.subClass({imageMagick: true});
-const readFile = promisify(fs.readFile);
-const writeFile = promisify(fs.writeFile);
+const parseImageTypes = buffer => {
+	const parsed = icns.parse(buffer);
+	const result = {};
+	for (const [key, value] of Object.entries(parsed)) {
+		if (icns.isImageType(key)) {
+			result[key] = value;
+		}
+	}
 
-const filterMap = (map, filterFunction) => Object.fromEntries(Object.entries(map).filter(element => filterFunction(element)).map(([key, item]) => [key, item]));
+	return result;
+};
 
-// Drive icon from `/System/Library/Extensions/IOStorageFamily.kext/Contents/Resources/Removable.icns``
+const composeIconUnavailable = Symbol('composeIconUnavailable');
+
+const isComposeIconUnavailable = error => {
+	const message = error?.stderr || error?.message || '';
+	return error?.code === 'ENOENT'
+		|| error?.code === 'EACCES'
+		|| message.includes('bad CPU type')
+		|| message.includes('not compatible with this version of macOS');
+};
+
+// Drive icon from `/System/Library/Extensions/IOStorageFamily.kext/Contents/Resources/Removable.icns`
 const baseDiskIconPath = `${__dirname}/disk-icon.icns`;
 
-const biggestPossibleIconType = 'ic10';
+const swiftExecutablePath = path.join(__dirname, 'compose-icon');
 
-async function baseComposeIcon(type, appIcon, mountIcon, composedIcon) {
-	mountIcon = gm(mountIcon);
-	appIcon = gm(appIcon);
+const largestIconType = 'ic10';
 
-	const [appIconSize, mountIconSize] = await Promise.all([
-		promisify(appIcon.size.bind(appIcon))(),
-		promisify(appIcon.size.bind(mountIcon))(),
-	]);
-
-	// Change the perspective of the app icon to match the mount drive icon
-	appIcon = appIcon.out('-matte').out('-virtual-pixel', 'transparent').out('-distort', 'Perspective', `1,1  ${appIconSize.width * 0.08},1     ${appIconSize.width},1  ${appIconSize.width * 0.92},1     1,${appIconSize.height}  1,${appIconSize.height}     ${appIconSize.width},${appIconSize.height}  ${appIconSize.width},${appIconSize.height}`);
-
-	// Resize the app icon to fit it inside the mount icon, aspect ration should not be kept to create the perspective illution
-	appIcon = appIcon.resize(mountIconSize.width / 1.58, mountIconSize.height / 1.82, '!');
-
+async function composeIconVariant(appIconData, diskIconData) {
 	const temporaryAppIconPath = temporaryFile({extension: 'png'});
-	await promisify(appIcon.write.bind(appIcon))(temporaryAppIconPath);
+	const temporaryDiskIconPath = temporaryFile({extension: 'png'});
+	const temporaryOutputPath = temporaryFile({extension: 'png'});
 
-	// Compose the two icons
-	const iconGravityFactor = mountIconSize.height * 0.063;
-	mountIcon = mountIcon.composite(temporaryAppIconPath).gravity('Center').geometry(`+0-${iconGravityFactor}`);
+	try {
+		await Promise.all([
+			fs.writeFile(temporaryAppIconPath, appIconData),
+			fs.writeFile(temporaryDiskIconPath, diskIconData),
+		]);
 
-	composedIcon[type] = await promisify(mountIcon.toBuffer.bind(mountIcon))();
+		await execa(swiftExecutablePath, [
+			temporaryAppIconPath,
+			temporaryDiskIconPath,
+			temporaryOutputPath,
+		]);
+
+		return await fs.readFile(temporaryOutputPath);
+	} catch (error) {
+		if (isComposeIconUnavailable(error)) {
+			const unavailableError = new Error('compose-icon is unavailable');
+			unavailableError.code = composeIconUnavailable;
+			unavailableError.cause = error;
+			throw unavailableError;
+		}
+
+		throw new Error(`Swift image processing failed: ${error.stderr || error.message}`);
+	} finally {
+		await Promise.all([
+			fs.rm(temporaryAppIconPath, {force: true}),
+			fs.rm(temporaryDiskIconPath, {force: true}),
+			fs.rm(temporaryOutputPath, {force: true}),
+		]);
+	}
 }
 
-const hasGm = async () => {
+export default async function composeIcon(appIconPath) {
 	try {
-		await execa('gm', ['-version']);
-		return true;
+		await fs.access(swiftExecutablePath, fsConstants.X_OK);
+	} catch {
+		return baseDiskIconPath;
+	}
+
+	let baseDiskIconsData;
+	let appIconData;
+	try {
+		[baseDiskIconsData, appIconData] = await Promise.all([
+			fs.readFile(baseDiskIconPath),
+			fs.readFile(appIconPath),
+		]);
+	} catch {
+		return baseDiskIconPath;
+	}
+
+	const baseDiskIcons = parseImageTypes(baseDiskIconsData);
+	const appIcons = parseImageTypes(appIconData);
+
+	if (Object.keys(baseDiskIcons).length === 0 || Object.keys(appIcons).length === 0) {
+		console.warn('No usable icon variants found, falling back to base disk icon.');
+		return baseDiskIconPath;
+	}
+
+	const composedIcon = {};
+
+	try {
+		await Promise.all(Object.entries(appIcons).map(async ([type, icon]) => {
+			if (baseDiskIcons[type]) {
+				composedIcon[type] = await composeIconVariant(icon, baseDiskIcons[type]);
+				return;
+			}
+
+			console.warn('There is no base image for this type', type);
+		}));
+
+		if (!composedIcon[largestIconType]) {
+			// Make sure the highest-resolution variant is generated
+			const largestAppIcon = Object.values(appIcons).sort((a, b) => b.byteLength - a.byteLength)[0];
+			const largestDiskIcon = baseDiskIcons[largestIconType] ?? Object.values(baseDiskIcons).sort((a, b) => b.byteLength - a.byteLength)[0];
+
+			if (!largestDiskIcon) {
+				console.warn('No base disk icon variants available for composition.');
+				return baseDiskIconPath;
+			}
+
+			composedIcon[largestIconType] = await composeIconVariant(largestAppIcon, largestDiskIcon);
+		}
 	} catch (error) {
-		if (error.code === 'ENOENT') {
-			return false;
+		if (error?.code === composeIconUnavailable) {
+			console.warn('compose-icon is unavailable, falling back to base disk icon.');
+			return baseDiskIconPath;
 		}
 
 		throw error;
 	}
-};
-
-export default async function composeIcon(appIconPath) {
-	if (!await hasGm()) {
-		return baseDiskIconPath;
-	}
-
-	const baseDiskIcons = filterMap(icns.parse(await readFile(baseDiskIconPath)), ([key]) => icns.isImageType(key));
-	const appIcon = filterMap(icns.parse(await readFile(appIconPath)), ([key]) => icns.isImageType(key));
-
-	const composedIcon = {};
-	await Promise.all(Object.entries(appIcon).map(async ([type, icon]) => {
-		if (baseDiskIcons[type]) {
-			return baseComposeIcon(type, icon, baseDiskIcons[type], composedIcon);
-		}
-
-		console.warn('There is no base image for this type', type);
-	}));
-
-	if (!composedIcon[biggestPossibleIconType]) {
-		// Make sure the highest-resolution variant is generated
-		const largestAppIcon = Object.values(appIcon).sort((a, b) => Buffer.byteLength(b) - Buffer.byteLength(a))[0];
-		await baseComposeIcon(biggestPossibleIconType, largestAppIcon, baseDiskIcons[biggestPossibleIconType], composedIcon);
-	}
 
 	const temporaryComposedIcon = temporaryFile({extension: 'icns'});
 
-	await writeFile(temporaryComposedIcon, icns.format(composedIcon));
+	await fs.writeFile(temporaryComposedIcon, icns.format(composedIcon));
 
 	return temporaryComposedIcon;
 }

@@ -1,6 +1,6 @@
 {
 	"name": "create-dmg",
-	"version": "7.1.0",
+	"version": "8.1.0",
 	"description": "Create a good-looking DMG for your macOS app in seconds",
 	"license": "MIT",
 	"repository": "sindresorhus/create-dmg",
@@ -15,18 +15,20 @@
 		"create-dmg": "./cli.js"
 	},
 	"engines": {
-		"node": ">=18"
+		"node": ">=20"
 	},
 	"scripts": {
-		"test": "ava"
+		"test": "ava",
+		"build": "cd ComposeIcon && xcrun swift build -c release --arch arm64 --arch x86_64 --product compose-icon && cp .build/apple/Products/Release/compose-icon ../compose-icon",
+		"prepublishOnly": "npm run build"
 	},
 	"files": [
 		"cli.js",
 		"compose-icon.js",
+		"sla.js",
 		"assets",
 		"disk-icon.icns",
-		"sla.js",
-		"base.r"
+		"compose-icon"
 	],
 	"keywords": [
 		"cli-app",
@@ -43,16 +45,20 @@
 	],
 	"dependencies": {
 		"appdmg": "^0.6.6",
-		"execa": "^8.0.1",
-		"gm": "^1.25.0",
+		"execa": "^9.6.1",
 		"icns-lib": "^1.0.1",
-		"meow": "^13.1.0",
-		"ora": "^8.0.1",
+		"meow": "^14.0.0",
+		"ora": "^9.1.0",
 		"plist": "^3.1.0",
-		"tempy": "^3.1.0"
+		"tempy": "^3.1.1"
 	},
 	"devDependencies": {
-		"ava": "^6.1.1",
-		"xo": "^0.56.0"
+		"ava": "^6.4.1",
+		"jest-image-snapshot": "^6.5.1",
+		"xo": "^1.2.3"
+	},
+	"ava": {
+		"serial": true,
+		"timeout": "30s"
 	}
 }

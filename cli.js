@@ -168,7 +168,7 @@ async function init() {
 	ee.on('finish', async () => {
 		try {
 			ora.text = 'Adding Software License Agreement if needed';
-			await addLicenseAgreementIfNeeded(dmgPath, dmgFormat);
+			await addLicenseAgreementIfNeeded(dmgPath);
 
 			if (cli.flags.codeSign) {
 				ora.text = 'Code signing DMG';
